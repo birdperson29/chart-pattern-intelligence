@@ -455,76 +455,452 @@ elif page == "📈 Backtester":
 
 
 elif page == "💬 Chat":
-    st.title("💬 Ask About Patterns")
+    st.title("💬 Smart Stock Chat")
 
-    st.info("Ask questions in plain English. Examples: 'Analyze RELIANCE', 'Show me breakout stocks', 'What patterns is TATAMOTORS showing?'")
+    st.info("Ask anything in plain English! Examples: 'I have ₹10,000 to invest for 4 months', 'Best bullish stocks right now', 'Is RELIANCE a good buy?', 'Which stocks are oversold?'")
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
-    # Display chat history
+    # ── Smart Intent Engine ──────────────────────────────────────
+    import re
+
+    def parse_budget(msg):
+        """Extract budget amount from message."""
+        patterns_re = [
+            r'₹\s*([\d,]+)', r'rs\.?\s*([\d,]+)', r'inr\s*([\d,]+)',
+            r'([\d,]+)\s*(?:rupees|rs|inr)', r'([\d,]+)\s*(?:to invest|budget)',
+            r'(?:invest|have|got)\s*(?:₹|rs\.?|inr)?\s*([\d,]+)',
+        ]
+        for p in patterns_re:
+            m = re.search(p, msg, re.IGNORECASE)
+            if m:
+                return int(m.group(1).replace(',', ''))
+        return None
+
+    def parse_timeframe(msg):
+        """Extract investment timeframe in months."""
+        m = re.search(r'(\d+)\s*(?:-\s*\d+\s*)?(?:month|mo)', msg, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        m = re.search(r'(\d+)\s*(?:-\s*\d+\s*)?(?:year|yr)', msg, re.IGNORECASE)
+        if m:
+            return int(m.group(1)) * 12
+        m = re.search(r'(\d+)\s*(?:-\s*\d+\s*)?(?:week|wk)', msg, re.IGNORECASE)
+        if m:
+            return max(1, int(m.group(1)) // 4)
+        if any(w in msg.lower() for w in ['short term', 'short-term', 'quick']):
+            return 3
+        if any(w in msg.lower() for w in ['long term', 'long-term']):
+            return 12
+        return None
+
+    def detect_intent(msg):
+        """Classify user intent."""
+        msg_lower = msg.lower()
+        msg_upper = msg.upper()
+
+        # Check for specific stock symbol
+        symbol_found = None
+        for sym in NIFTY_50:
+            # Match whole word to avoid partial matches
+            if re.search(r'\b' + re.escape(sym) + r'\b', msg_upper):
+                symbol_found = sym
+                break
+
+        # Investment recommendation intent
+        invest_words = ['invest', 'buy', 'which stock', 'best stock', 'recommend',
+                       'suggestion', 'where to put', 'good stock', 'returns',
+                       'portfolio', 'money', 'rupees', 'budget', 'pick']
+        is_invest = any(w in msg_lower for w in invest_words)
+
+        # Scan intent
+        scan_words = ['scan', 'breakout', 'breaking', 'all stocks', 'nifty',
+                     'screen', 'filter', 'find stocks', 'show me stocks']
+        is_scan = any(w in msg_lower for w in scan_words)
+
+        # Specific pattern query
+        pattern_words = ['oversold', 'overbought', 'divergence', 'support', 'resistance',
+                        'golden cross', 'death cross', 'squeeze', 'double top',
+                        'double bottom', 'head and shoulders', 'triangle', 'wedge', 'flag']
+        pattern_match = None
+        for pw in pattern_words:
+            if pw in msg_lower:
+                pattern_match = pw
+                break
+
+        # Comparison intent
+        is_compare = any(w in msg_lower for w in ['vs', 'versus', 'compare', 'or', 'better'])
+
+        # Sector query
+        sector_words = {'it': 'IT', 'tech': 'IT', 'bank': 'Banking', 'banking': 'Banking',
+                       'pharma': 'Pharma', 'auto': 'Auto', 'fmcg': 'FMCG', 'metal': 'Metals',
+                       'oil': 'Oil & Gas', 'power': 'Power', 'telecom': 'Telecom',
+                       'cement': 'Cement', 'insurance': 'Insurance', 'finance': 'Finance'}
+        sector_found = None
+        for sw, sector_name in sector_words.items():
+            if re.search(r'\b' + sw + r'\b', msg_lower):
+                sector_found = sector_name
+                break
+
+        return {
+            'symbol': symbol_found,
+            'is_invest': is_invest,
+            'is_scan': is_scan,
+            'pattern_match': pattern_match,
+            'is_compare': is_compare,
+            'sector': sector_found,
+            'budget': parse_budget(msg),
+            'timeframe': parse_timeframe(msg),
+        }
+
+    def smart_invest_response(intent, status_placeholder):
+        """Handle investment recommendation queries."""
+        budget = intent['budget']
+        timeframe = intent['timeframe'] or 3
+        sector = intent['sector']
+
+        # Determine which stocks to scan
+        if sector:
+            symbols = [s for s, sec in SECTOR_MAP.items() if sec == sector]
+            scan_label = f"{sector} sector stocks"
+        else:
+            symbols = NIFTY_50
+            scan_label = "Nifty 50"
+
+        status_placeholder.text(f"🔍 Scanning {scan_label} for bullish patterns...")
+
+        bullish_picks = []
+        for i, sym in enumerate(symbols):
+            status_placeholder.text(f"Analyzing {sym}... ({i+1}/{len(symbols)})")
+            df = fetch_stock_data(sym, period="1y")
+            if df is None:
+                continue
+
+            analysis = scan_all_patterns(df, symbol=sym)
+            bullish_patterns = [p for p in analysis["patterns"] if p.get("signal") == "bullish" and p.get("confidence", 0) >= 55]
+
+            if bullish_patterns:
+                price = analysis["current_price"]
+                rsi_val = analysis["indicators"].get("rsi_14", 50)
+                # Score: more bullish patterns + higher confidence + favorable RSI = better
+                score = sum(p.get("confidence", 50) for p in bullish_patterns) + (60 - rsi_val if rsi_val < 50 else 0)
+
+                bullish_picks.append({
+                    "symbol": sym,
+                    "price": price,
+                    "patterns": bullish_patterns,
+                    "pattern_count": len(bullish_patterns),
+                    "top_confidence": max(p.get("confidence", 0) for p in bullish_patterns),
+                    "rsi": rsi_val,
+                    "score": score,
+                    "sector": SECTOR_MAP.get(sym, "Unknown"),
+                })
+
+        status_placeholder.empty()
+
+        if not bullish_picks:
+            return "I scanned the market but didn't find strong bullish setups right now. The market might be in a consolidation phase. Try again in a few days or check specific stocks you're interested in."
+
+        # Sort by score
+        bullish_picks.sort(key=lambda x: x["score"], reverse=True)
+        top_picks = bullish_picks[:5]
+
+        # Build response
+        lines = []
+
+        # Personalized intro
+        if budget:
+            lines.append(f"💰 **Budget: ₹{budget:,}** | ⏱️ **Timeframe: ~{timeframe} months**\n")
+        lines.append(f"I scanned **{len(symbols)} stocks** in {scan_label} and found **{len(bullish_picks)} with bullish signals**. Here are the top picks:\n")
+        lines.append("---")
+
+        for i, pick in enumerate(top_picks):
+            emoji_rank = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][i]
+            lines.append(f"\n{emoji_rank} **{pick['symbol']}** — ₹{pick['price']:,.2f}")
+            lines.append(f"   Sector: {pick['sector']} | RSI: {pick['rsi']:.1f}")
+
+            for p in pick["patterns"][:3]:
+                pname = p["pattern"].replace("_", " ").title()
+                lines.append(f"   🟢 {pname} (confidence: {p.get('confidence', '?')}%)")
+
+            # Budget-aware note
+            if budget and pick["price"] > 0:
+                shares = int(budget / pick["price"])
+                if shares > 0:
+                    invest_amount = shares * pick["price"]
+                    lines.append(f"   📊 With ₹{budget:,} → you can buy **{shares} shares** (₹{invest_amount:,.0f})")
+                else:
+                    lines.append(f"   ⚠️ Price ₹{pick['price']:,.0f} exceeds your budget per share")
+
+        lines.append("\n---")
+
+        # Timeframe-specific advice
+        if timeframe and timeframe <= 3:
+            lines.append("\n⏱️ **Short-term (1-3 months)**: Focus on breakout and momentum patterns. Use strict stop-losses (5-7% below entry).")
+        elif timeframe and timeframe <= 6:
+            lines.append("\n⏱️ **Medium-term (3-6 months)**: Reversal patterns (double bottom, inverse H&S) tend to play out well. Consider averaging in over 2-3 tranches.")
+        elif timeframe:
+            lines.append("\n⏱️ **Long-term (6+ months)**: Golden cross and trend-following setups work best. SIP approach recommended over lump sum.")
+
+        if budget and budget <= 15000:
+            lines.append("\n💡 **Tip for small portfolios**: Consider 2-3 stocks max to avoid over-diversification. Or look at ETFs (NIFTYBEES, JUNIORBEES) for diversified exposure at low cost.")
+
+        lines.append("\n⚠️ *This is pattern-based technical analysis, not financial advice. Always do your own research and consider consulting a SEBI-registered advisor.*")
+
+        return "\n".join(lines)
+
+    def smart_pattern_scan(pattern_keyword, status_placeholder):
+        """Scan for a specific pattern type across Nifty 50."""
+        pattern_map = {
+            'oversold': ('rsi_oversold', 'bullish'),
+            'overbought': ('rsi_overbought', 'bearish'),
+            'divergence': ('divergence', None),
+            'golden cross': ('golden_cross', 'bullish'),
+            'death cross': ('death_cross', 'bearish'),
+            'squeeze': ('bb_squeeze', None),
+            'double top': ('double_top', 'bearish'),
+            'double bottom': ('double_bottom', 'bullish'),
+            'head and shoulders': ('head_and_shoulders', None),
+            'triangle': ('triangle', None),
+            'wedge': ('wedge', None),
+            'flag': ('flag', None),
+            'support': ('support', None),
+            'resistance': ('resistance', None),
+        }
+
+        target_pattern, _ = pattern_map.get(pattern_keyword, (pattern_keyword, None))
+        found = []
+
+        for i, sym in enumerate(NIFTY_50):
+            status_placeholder.text(f"Scanning {sym} for {pattern_keyword}... ({i+1}/{len(NIFTY_50)})")
+            df = fetch_stock_data(sym, period="1y")
+            if df is None:
+                continue
+
+            analysis = scan_all_patterns(df, symbol=sym)
+            matching = [p for p in analysis["patterns"] if target_pattern in p.get("pattern", "")]
+
+            if matching:
+                found.append({
+                    "symbol": sym,
+                    "price": analysis["current_price"],
+                    "patterns": matching,
+                    "sector": SECTOR_MAP.get(sym, "Unknown"),
+                })
+
+        status_placeholder.empty()
+
+        if not found:
+            return f"No stocks in Nifty 50 currently showing **{pattern_keyword}** pattern. This pattern may appear when market conditions change."
+
+        lines = [f"Found **{len(found)} stocks** with **{pattern_keyword}** signals:\n"]
+        for f_item in found[:8]:
+            emoji = "🟢" if any(p.get("signal") == "bullish" for p in f_item["patterns"]) else "🔴" if any(p.get("signal") == "bearish" for p in f_item["patterns"]) else "🟡"
+            lines.append(f"{emoji} **{f_item['symbol']}** — ₹{f_item['price']:,.2f} ({f_item['sector']})")
+            for p in f_item["patterns"][:2]:
+                pname = p["pattern"].replace("_", " ").title()
+                lines.append(f"   → {pname} | Confidence: {p.get('confidence', '?')}% | Signal: {p.get('signal', 'N/A')}")
+        return "\n".join(lines)
+
+    def smart_compare(symbols_list, status_placeholder):
+        """Compare two or more stocks."""
+        results = []
+        for sym in symbols_list:
+            status_placeholder.text(f"Analyzing {sym}...")
+            df = fetch_stock_data(sym, period="1y")
+            if df is None:
+                continue
+            analysis = scan_all_patterns(df, symbol=sym)
+            bullish = [p for p in analysis["patterns"] if p.get("signal") == "bullish"]
+            bearish = [p for p in analysis["patterns"] if p.get("signal") == "bearish"]
+            results.append({
+                "symbol": sym,
+                "price": analysis["current_price"],
+                "bullish_count": len(bullish),
+                "bearish_count": len(bearish),
+                "rsi": analysis["indicators"].get("rsi_14", 0),
+                "patterns": analysis["patterns"],
+                "sector": SECTOR_MAP.get(sym, "Unknown"),
+            })
+        status_placeholder.empty()
+
+        if len(results) < 2:
+            return "Need at least 2 valid stocks to compare. Make sure the symbols are in the Nifty 50."
+
+        lines = ["📊 **Head-to-Head Comparison**\n"]
+        lines.append("| Metric | " + " | ".join(r["symbol"] for r in results) + " |")
+        lines.append("|--------|" + "|".join(["--------"] * len(results)) + "|")
+        lines.append("| Price | " + " | ".join(f"₹{r['price']:,.2f}" for r in results) + " |")
+        lines.append("| RSI | " + " | ".join(f"{r['rsi']:.1f}" for r in results) + " |")
+        lines.append("| Bullish Signals | " + " | ".join(f"🟢 {r['bullish_count']}" for r in results) + " |")
+        lines.append("| Bearish Signals | " + " | ".join(f"🔴 {r['bearish_count']}" for r in results) + " |")
+
+        # Winner
+        best = max(results, key=lambda r: r["bullish_count"] - r["bearish_count"])
+        lines.append(f"\n**Technical edge: {best['symbol']}** has the strongest bullish setup with {best['bullish_count']} bullish vs {best['bearish_count']} bearish signals.")
+
+        for r in results:
+            if r["patterns"]:
+                lines.append(f"\n**{r['symbol']}** patterns:")
+                for p in r["patterns"][:3]:
+                    emoji = "🟢" if p.get("signal") == "bullish" else "🔴" if p.get("signal") == "bearish" else "🟡"
+                    lines.append(f"  {emoji} {p['pattern'].replace('_', ' ').title()} ({p.get('confidence', '?')}%)")
+
+        return "\n".join(lines)
+
+    # ── Chat UI ──────────────────────────────────────────────────
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+            st.markdown(msg["content"])
 
-    user_input = st.chat_input("Ask about stocks, patterns, or the market...")
+    user_input = st.chat_input("Ask anything about stocks, investments, or patterns...")
 
     if user_input:
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
-            st.write(user_input)
+            st.markdown(user_input)
 
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                # Simple intent parsing
-                msg = user_input.upper()
-                response = ""
+            status = st.empty()
+            intent = detect_intent(user_input)
+            response = ""
 
-                # Try to find a symbol
-                symbol_found = None
-                for sym in NIFTY_50:
-                    if sym in msg:
-                        symbol_found = sym
-                        break
+            # 1. Compare stocks (e.g., "RELIANCE vs TCS" or "compare INFY and WIPRO")
+            if intent['is_compare'] and not intent['symbol']:
+                msg_upper = user_input.upper()
+                compare_symbols = [s for s in NIFTY_50 if re.search(r'\b' + re.escape(s) + r'\b', msg_upper)]
+                if len(compare_symbols) >= 2:
+                    response = smart_compare(compare_symbols[:4], status)
+                else:
+                    response = "Please mention at least 2 stock symbols to compare. Example: 'Compare RELIANCE vs TCS'"
 
-                if symbol_found:
-                    df = fetch_stock_data(symbol_found, period="1y")
-                    if df is not None:
-                        analysis = scan_all_patterns(df, symbol=symbol_found)
-                        response = explain_analysis(analysis)
+            # 2. Specific stock analysis
+            elif intent['symbol'] and not intent['is_invest']:
+                status.text(f"🔍 Analyzing {intent['symbol']}...")
+                df = fetch_stock_data(intent['symbol'], period="1y")
+                if df is not None:
+                    analysis = scan_all_patterns(df, symbol=intent['symbol'])
+                    patterns = analysis["patterns"]
+                    price = analysis["current_price"]
+                    indicators = analysis["indicators"]
+
+                    lines = [f"## {intent['symbol']} — ₹{price:,.2f}\n"]
+
+                    # Quick verdict
+                    bullish = [p for p in patterns if p.get("signal") == "bullish"]
+                    bearish = [p for p in patterns if p.get("signal") == "bearish"]
+                    if len(bullish) > len(bearish):
+                        lines.append(f"**Overall: 🟢 BULLISH** ({len(bullish)} bullish vs {len(bearish)} bearish signals)\n")
+                    elif len(bearish) > len(bullish):
+                        lines.append(f"**Overall: 🔴 BEARISH** ({len(bearish)} bearish vs {len(bullish)} bullish signals)\n")
                     else:
-                        response = f"Sorry, couldn't fetch data for {symbol_found}."
-                elif any(w in msg for w in ["BREAKOUT", "BREAKING", "SCAN"]):
-                    response = "Scanning Nifty 50 for breakouts...\n\n"
-                    symbols = get_index_symbols("nifty50")
-                    found = []
-                    for sym in symbols:
+                        lines.append(f"**Overall: 🟡 NEUTRAL** ({len(bullish)} bullish, {len(bearish)} bearish)\n")
+
+                    # Key indicators
+                    rsi_val = indicators.get("rsi_14", 0)
+                    rsi_label = "Overbought ⚠️" if rsi_val > 70 else "Oversold 👀" if rsi_val < 30 else "Neutral"
+                    lines.append(f"**RSI:** {rsi_val:.1f} ({rsi_label})")
+                    if indicators.get("sma_50") and indicators.get("sma_200"):
+                        above200 = "✅ Above" if price > indicators["sma_200"] else "❌ Below"
+                        lines.append(f"**200-day SMA:** ₹{indicators['sma_200']:,.0f} ({above200})")
+
+                    # Patterns
+                    if patterns:
+                        lines.append(f"\n**Detected Patterns:**")
+                        for p in patterns[:5]:
+                            emoji = "🟢" if p.get("signal") == "bullish" else "🔴" if p.get("signal") == "bearish" else "🟡"
+                            pname = p["pattern"].replace("_", " ").title()
+                            lines.append(f"  {emoji} **{pname}** — {p.get('signal', 'N/A')} (confidence: {p.get('confidence', '?')}%)")
+                    else:
+                        lines.append("\nNo significant patterns detected right now.")
+
+                    # S/R levels
+                    sr = analysis.get("support_resistance", {})
+                    supports = sr.get("support", [])[:2]
+                    resistances = sr.get("resistance", [])[:2]
+                    if supports or resistances:
+                        lines.append(f"\n**Key Levels:**")
+                        for s in supports:
+                            lines.append(f"  🟢 Support: ₹{s['level']:,.0f} ({s['touches']}x tested)")
+                        for r in resistances:
+                            lines.append(f"  🔴 Resistance: ₹{r['level']:,.0f} ({r['touches']}x tested)")
+
+                    # Buy/sell context
+                    msg_lower = user_input.lower()
+                    if any(w in msg_lower for w in ['buy', 'good buy', 'should i', 'worth']):
+                        lines.append(f"\n**Should you buy?**")
+                        if len(bullish) > len(bearish) and rsi_val < 65:
+                            lines.append(f"Technical signals are leaning bullish with {len(bullish)} positive patterns. RSI at {rsi_val:.0f} suggests room to run.")
+                        elif rsi_val > 70:
+                            lines.append(f"⚠️ RSI is overbought at {rsi_val:.0f} — consider waiting for a pullback before entering.")
+                        elif len(bearish) > len(bullish):
+                            lines.append(f"⚠️ More bearish signals ({len(bearish)}) than bullish ({len(bullish)}). May want to wait for reversal confirmation.")
+                        else:
+                            lines.append(f"Signals are mixed. Consider waiting for a clearer setup or average in gradually.")
+
+                    lines.append("\n⚠️ *Technical analysis only — not financial advice.*")
+                    response = "\n".join(lines)
+                else:
+                    response = f"Sorry, couldn't fetch data for {intent['symbol']}. Check the symbol and try again."
+                status.empty()
+
+            # 3. Investment recommendation (budget/timeframe based)
+            elif intent['is_invest'] or intent['budget']:
+                response = smart_invest_response(intent, status)
+
+            # 4. Specific pattern scan
+            elif intent['pattern_match']:
+                response = smart_pattern_scan(intent['pattern_match'], status)
+
+            # 5. Sector query
+            elif intent['sector'] and not intent['is_invest']:
+                sector = intent['sector']
+                sector_symbols = [s for s, sec in SECTOR_MAP.items() if sec == sector]
+                if sector_symbols:
+                    lines = [f"## {sector} Sector Analysis\n"]
+                    for sym in sector_symbols:
                         df = fetch_stock_data(sym, period="1y")
                         if df is None:
                             continue
                         analysis = scan_all_patterns(df, symbol=sym)
-                        bk = [p for p in analysis["patterns"] if "breakout" in p.get("pattern", "")]
-                        if bk:
-                            found.append((sym, bk))
-
-                    if found:
-                        for sym, pats in found[:5]:
-                            for p in pats:
-                                emoji = "🟢" if p["signal"] == "bullish" else "🔴"
-                                response += f"{emoji} **{sym}**: {p['pattern'].replace('_', ' ').title()} ({p.get('confidence', '?')}%)\n"
-                    else:
-                        response += "No breakout signals found right now."
+                        bullish = sum(1 for p in analysis["patterns"] if p.get("signal") == "bullish")
+                        bearish = sum(1 for p in analysis["patterns"] if p.get("signal") == "bearish")
+                        emoji = "🟢" if bullish > bearish else "🔴" if bearish > bullish else "🟡"
+                        lines.append(f"{emoji} **{sym}** — ₹{analysis['current_price']:,.2f} | {bullish} bullish, {bearish} bearish")
+                    response = "\n".join(lines)
                 else:
-                    response = (
-                        "I can help with:\n"
-                        "- **Analyze [SYMBOL]** — e.g., 'Analyze RELIANCE'\n"
-                        "- **Breakout scan** — find breakout candidates\n"
-                        "- **[SYMBOL] patterns** — e.g., 'TATAMOTORS patterns'\n\n"
-                        "Just mention an NSE stock symbol and I'll analyze it!"
-                    )
+                    response = f"No stocks found for sector: {sector}"
+                status.empty()
 
-                st.text(response)
-                st.session_state.chat_history.append({"role": "assistant", "content": response})
+            # 6. Scan / breakout search
+            elif intent['is_scan']:
+                response = smart_invest_response({**intent, 'is_invest': True, 'budget': None, 'timeframe': None, 'sector': None}, status)
+
+            # 7. Fallback — but still helpful
+            else:
+                response = (
+                    "I can help with a lot! Here are some things you can ask:\n\n"
+                    "💰 **Investment queries:**\n"
+                    "  • 'I have ₹10,000 to invest for 3 months'\n"
+                    "  • 'Best stocks to buy right now'\n"
+                    "  • 'Good banking stocks for long term'\n\n"
+                    "📊 **Stock analysis:**\n"
+                    "  • 'Analyze RELIANCE'\n"
+                    "  • 'Is TATAMOTORS a good buy?'\n"
+                    "  • 'Compare INFY vs TCS vs WIPRO'\n\n"
+                    "🔍 **Pattern scanning:**\n"
+                    "  • 'Which stocks are oversold?'\n"
+                    "  • 'Find golden cross stocks'\n"
+                    "  • 'Show me breakout candidates'\n\n"
+                    "🏢 **Sector analysis:**\n"
+                    "  • 'How is the IT sector looking?'\n"
+                    "  • 'Best pharma stocks'\n\n"
+                    "Just ask naturally — I'll figure out what you need! 🚀"
+                )
+
+            st.markdown(response)
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
 
 
 # ── Footer ───────────────────────────────────────────────────────────────────

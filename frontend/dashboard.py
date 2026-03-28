@@ -206,7 +206,6 @@ page = st.sidebar.radio("Navigate", [
     "📡 Pattern Scanner",
     "📈 Backtester",
 ], index=0)
-
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Settings**")
 data_period = st.sidebar.selectbox("Data Period", ["6mo", "1y", "2y", "5y"], index=2)
@@ -583,14 +582,20 @@ elif page == "💬 Chat":
             if bullish_patterns:
                 price = analysis["current_price"]
                 rsi_val = analysis["indicators"].get("rsi_14", 50)
-                # Score: more bullish patterns + higher confidence + favorable RSI = better
-                score = sum(p.get("confidence", 50) for p in bullish_patterns) + (60 - rsi_val if rsi_val < 50 else 0)
+
+                # Score: diversity of pattern types + avg confidence + favorable RSI
+                unique_types = len(set(p.get("type", "") for p in bullish_patterns))
+                unique_names = len(set(p.get("pattern", "") for p in bullish_patterns))
+                avg_conf = sum(p.get("confidence", 50) for p in bullish_patterns) / len(bullish_patterns)
+                rsi_bonus = max(0, 50 - rsi_val) * 0.5  # Bonus for oversold stocks
+                score = (avg_conf * 1.5) + (unique_names * 15) + (unique_types * 10) + rsi_bonus
 
                 bullish_picks.append({
                     "symbol": sym,
                     "price": price,
                     "patterns": bullish_patterns,
                     "pattern_count": len(bullish_patterns),
+                    "unique_patterns": unique_names,
                     "top_confidence": max(p.get("confidence", 0) for p in bullish_patterns),
                     "rsi": rsi_val,
                     "score": score,
@@ -602,9 +607,19 @@ elif page == "💬 Chat":
         if not bullish_picks:
             return "I scanned the market but didn't find strong bullish setups right now. The market might be in a consolidation phase. Try again in a few days or check specific stocks you're interested in."
 
-        # Sort by score
+        # Sort by score, then pick with sector diversity
         bullish_picks.sort(key=lambda x: x["score"], reverse=True)
-        top_picks = bullish_picks[:5]
+        top_picks = []
+        seen_sectors = set()
+        # First pass: pick the best from each sector
+        for pick in bullish_picks:
+            if pick["sector"] not in seen_sectors and len(top_picks) < 5:
+                top_picks.append(pick)
+                seen_sectors.add(pick["sector"])
+        # Second pass: fill remaining slots with highest scores
+        for pick in bullish_picks:
+            if pick not in top_picks and len(top_picks) < 5:
+                top_picks.append(pick)
 
         # Build response
         lines = []

@@ -199,20 +199,6 @@ pytest tests/ -v
 
 ---
 
-## Impact Model
-
-| Metric | Estimate |
-|--------|----------|
-| **Time Saved** | 3-4 hours/day per investor (manual chart analysis → automated) |
-| **Addressable Market** | 14 crore+ demat accounts; ~20M active traders |
-| **Pattern Accuracy** | 55-65% directional accuracy (back-tested) |
-| **Cost vs Alternatives** | ₹99-499/month vs ₹20L+/year (Bloomberg) |
-| **Potential Revenue** | ₹6-20 Cr/year at scale (100K-500K users) |
-
-**Assumptions**: Based on SEBI data showing 93% of retail F&O traders lost ₹1.8L crores (FY22-24). Even a 5% improvement in decision quality across 100K users represents significant value.
-
----
-
 ## Tech Stack
 
 - **Backend**: Python, FastAPI, NumPy, Pandas, SciPy

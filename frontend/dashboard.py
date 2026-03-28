@@ -530,7 +530,7 @@ elif page == "💬 Chat":
                 break
 
         # Comparison intent
-        is_compare = any(w in msg_lower for w in ['vs', 'versus', 'compare', 'or', 'better'])
+        is_compare = bool(re.search(r'\b(vs|versus|compare|better)\b', msg_lower)) or ' or ' in msg_lower
 
         # Sector query
         sector_words = {'it': 'IT', 'tech': 'IT', 'bank': 'Banking', 'banking': 'Banking',
@@ -766,8 +766,12 @@ elif page == "💬 Chat":
             intent = detect_intent(user_input)
             response = ""
 
-            # 1. Compare stocks (e.g., "RELIANCE vs TCS" or "compare INFY and WIPRO")
-            if intent['is_compare'] and not intent['symbol']:
+            # 1. Investment recommendation (budget/timeframe based) — highest priority
+            if (intent['is_invest'] or intent['budget']) and not intent['symbol']:
+                response = smart_invest_response(intent, status)
+
+            # 2. Compare stocks (e.g., "RELIANCE vs TCS" or "compare INFY and WIPRO")
+            elif intent['is_compare'] and not intent['symbol']:
                 msg_upper = user_input.upper()
                 compare_symbols = [s for s in NIFTY_50 if re.search(r'\b' + re.escape(s) + r'\b', msg_upper)]
                 if len(compare_symbols) >= 2:
@@ -775,8 +779,8 @@ elif page == "💬 Chat":
                 else:
                     response = "Please mention at least 2 stock symbols to compare. Example: 'Compare RELIANCE vs TCS'"
 
-            # 2. Specific stock analysis
-            elif intent['symbol'] and not intent['is_invest']:
+            # 3. Specific stock analysis
+            elif intent['symbol']:
                 status.text(f"🔍 Analyzing {intent['symbol']}...")
                 df = fetch_stock_data(intent['symbol'], period="1y")
                 if df is not None:
@@ -844,10 +848,6 @@ elif page == "💬 Chat":
                 else:
                     response = f"Sorry, couldn't fetch data for {intent['symbol']}. Check the symbol and try again."
                 status.empty()
-
-            # 3. Investment recommendation (budget/timeframe based)
-            elif intent['is_invest'] or intent['budget']:
-                response = smart_invest_response(intent, status)
 
             # 4. Specific pattern scan
             elif intent['pattern_match']:

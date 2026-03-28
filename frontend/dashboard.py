@@ -201,11 +201,11 @@ st.sidebar.title("📊 CPI")
 st.sidebar.caption("Chart Pattern Intelligence")
 
 page = st.sidebar.radio("Navigate", [
+    "💬 Chat",
     "🔍 Stock Analysis",
     "📡 Pattern Scanner",
     "📈 Backtester",
-    "💬 Chat",
-])
+], index=0)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("**Settings**")

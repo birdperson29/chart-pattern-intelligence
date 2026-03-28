@@ -1,4 +1,4 @@
-# 📊 Chart Pattern Intelligence (CPI)
+# Chart Pattern Intelligence (CPI)
 
 **Real-time technical pattern detection across the NSE universe with plain-English explanations and historical back-tested success rates.**
 
@@ -6,7 +6,7 @@ Built for the **ET AI Hackathon 2026** — Problem Statement #6: *AI for the Ind
 
 ---
 
-## 🎯 What It Does
+## What It Does
 
 Chart Pattern Intelligence (CPI) is an AI-powered system that:
 
@@ -18,7 +18,7 @@ Chart Pattern Intelligence (CPI) is an AI-powered system that:
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -56,7 +56,7 @@ Chart Pattern Intelligence (CPI) is an AI-powered system that:
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -112,7 +112,7 @@ python -m app.cli backtest TATAMOTORS.NS --pattern double_bottom --years 5
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 chart-pattern-intelligence/
@@ -154,7 +154,7 @@ chart-pattern-intelligence/
 
 ---
 
-## 🔌 API Reference
+## API Reference
 
 ### `GET /api/scan`
 Scan stocks for active patterns.
@@ -188,7 +188,7 @@ curl -X POST "http://localhost:8000/api/chat" \
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 
 ```bash
 pytest tests/ -v
@@ -196,7 +196,7 @@ pytest tests/ -v
 
 ---
 
-## 📊 Impact Model
+## Impact Model
 
 | Metric | Estimate |
 |--------|----------|
@@ -210,7 +210,7 @@ pytest tests/ -v
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - **Backend**: Python, FastAPI, NumPy, Pandas, SciPy
 - **Data**: yfinance, NSEpy
@@ -221,12 +221,12 @@ pytest tests/ -v
 
 ---
 
-## 📄 License
+## License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🤝 Team
+## Team
 
-Built for the ET AI Hackathon 2026 by [Your Team Name].
+Built for the ET AI Hackathon 2026 by Sejal :).

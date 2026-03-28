@@ -562,6 +562,15 @@ def scan_all_patterns(df: pd.DataFrame, symbol: str = "") -> Dict:
     for p in all_patterns:
         p["symbol"] = symbol
 
+    # ── Deduplicate: keep only the highest-confidence instance of each pattern ──
+    seen_patterns = {}
+    for p in all_patterns:
+        pname = p.get("pattern", "")
+        conf = p.get("confidence", 0)
+        if pname not in seen_patterns or conf > seen_patterns[pname].get("confidence", 0):
+            seen_patterns[pname] = p
+    all_patterns = list(seen_patterns.values())
+
     # Sort by confidence
     all_patterns.sort(key=lambda x: x.get("confidence", 0), reverse=True)
 

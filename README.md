@@ -4,6 +4,9 @@
 
 Built for the **ET AI Hackathon 2026** — Problem Statement #6: *AI for the Indian Investor*
 
+
+🚀 **Live Demo**: [chart-pattern-intelligence.streamlit.app](https://chart-pattern-intelligence.streamlit.app/)
+
 ---
 
 ## What It Does
